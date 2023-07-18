@@ -1,227 +1,5 @@
-import requests, csv, os, math, json, datetime, locale
+import requests, csv, os, math, json, datetime, urllib.parse
 from bs4 import BeautifulSoup
-def ListMaker():
-    print("    Parsing HTML (1/6)")
-    url = 'https://inara.cz/elite/commodities-list/'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    print("    Finding & Extracting Table (2/6)")
-    table = soup.find('table')
-    rows = table.find_all('tr')
-    row_data_list = []
-    string_list = []
-    print("    Processing Table (3/6)")
-    for row in rows:
-        cells = row.find_all('td')
-        try:
-            cell_texts = [cell.get_text(strip=True).replace(',', '') for cell in cells]
-            if all(cell_texts) and all(int(value.replace('Cr', '')) != 0 for value in cell_texts[1:3]):
-                modified_row_data = [
-                    cell_texts[0],
-                    int(cell_texts[-1].replace('Cr', ''))
-                ]
-                row_data_list.append(modified_row_data)
-        except IndexError:
-            continue
-    print("    Creating Commodity List (4/6)")
-    for row_data in row_data_list:
-        string_list.append(row_data[0])
-    data = []
-    existing_terms = set()
-    with open("!Commodities.csv", 'r') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            term = row['Term']
-            existing_terms.add(term)
-    print("    Uploading list to .csv file (5/6)")
-    for term in string_list:
-        if term in existing_terms:
-            continue
-        number = input(f"    -    Enter a number for '{term}': ")
-        data.append([term, number])
-    with open("!Commodities.csv", 'a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(data)
-    print("    .csv file saved (6/6)")
-def ImportCommodityData():
-    print("    Grabbing list of Commodities (1/3)")
-    with open("!Commodities.csv", 'r') as file:
-        reader = csv.reader(file)
-        next(reader)
-        print("    Getting all commodity data and saving to files (2/3)")
-        for row in reader:
-            term, number = row
-            link = f"https://inara.cz/elite/commodities/?pi1=1&pa1%5B%5D={number}&ps1=Sol&pi10=2&pi11=0&pi3=1&pi9=0&pi4=2&pi5=720&pi12=0&pi7=0&pi8=1"
-            response = requests.get(link)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            table = soup.find('table')
-            if table is None:
-                print(f"    -    No table found for {term}")
-                continue
-            csv_file_path = f"{term}Import.csv"
-            if os.path.exists(csv_file_path):
-                os.remove(csv_file_path)
-            with open(csv_file_path, 'a', newline='') as csv_file:
-                writer = csv.writer(csv_file)
-                rows = table.find_all('tr')
-                for row in rows:
-                    cells = row.find_all('td')
-                    cell_texts = [cell.get_text(strip=True).replace(',', '').replace('\uFFFD', "").replace('\ue84d', "").replace("\ue81d",'').replace("\ufe0e",'').replace("︎",'').replace('\ue84f', "").replace('\ue81d', "").replace('\ue84e', "").replace('\ue823', '') for cell in cells]
-                    writer.writerow(cell_texts)
-        print("    All files saved (3/3)")
-def EditImCommodityData():
-    print("    Indexing all files to be edited (1/3)")
-    csv_files = [file for file in os.listdir('.') if file.endswith('Import.csv')]
-    print("    Editing  & removing Files (2/3)")
-    for file in csv_files:
-        with open(file, 'r') as csv_file:
-            rows = csv.reader(csv_file)
-            modified_rows = []
-            for row in rows:
-                if row:
-                    modified_row = [row[0], *row[4:6]]
-                    modified_row[2] = modified_row[2].replace('Cr', '')
-                    if int(modified_row[1]) >= 20000:
-                        modified_rows.append(modified_row)
-        with open(file, 'w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerows(modified_rows)
-        if os.stat(file).st_size == 0:
-            os.remove(file)
-            print(f"    -    {os.path.splitext(file)[0].replace('Import','')} removed due to insufficient stock")
-    print("    All files edited & (3/3)")
-def ExportCommodityData():
-    print("    Grabbing list of Commodities (1/3)")
-    with open("!Commodities.csv", 'r') as file:
-        reader = csv.reader(file)
-        next(reader)
-        print("    Getting all commodity data and saving to files (2/3)")
-        for row in reader:
-            term, number = row
-            link = f"https://inara.cz/elite/commodities/?pi1=2&pa1%5B%5D={number}&ps1=Sol&pi10=2&pi11=0&pi3=1&pi9=0&pi4=2&pi5=720&pi12=0&pi7=0&pi8=1"
-            response = requests.get(link)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            table = soup.find('table')
-            if table is None:
-                print(f"    -    No table found for {term}")
-                continue
-            csv_file_path = f"{term}Export.csv"
-            if os.path.exists(csv_file_path):
-                os.remove(csv_file_path)
-            with open(csv_file_path, 'a', newline='') as csv_file:
-                writer = csv.writer(csv_file)
-                rows = table.find_all('tr')
-                for row in rows:
-                    cells = row.find_all('td')
-                    cell_texts = [cell.get_text(strip=True).replace(',', '').replace('\uFFFD', "").replace('\ue84d', "").replace("\ue81d",'').replace("\ufe0e",'').replace("︎",'').replace('\ue84f', "").replace('\ue81d', "").replace('\ue84e', "").replace('\ue823', '') for cell in cells]
-                    writer.writerow(cell_texts)
-        print("    All files saved (3/3)")
-def EditExCommodityData():
-    print("    Indexing all files to be edited (1/3)")
-    csv_files = [file for file in os.listdir('.') if file.endswith('Export.csv')]
-    print("    Editing & deleting files (2/3)")
-    for file in csv_files:
-        with open(file, 'r') as csv_file:
-            rows = csv.reader(csv_file)
-            modified_rows = []
-            for row in rows:
-                if row:
-                    modified_row = [row[0], *row[4:6]]
-                    modified_row[2] = modified_row[2].replace('Cr', '')
-                    if int(modified_row[1]) >= 20000:
-                        modified_rows.append(modified_row)
-        with open(file, 'w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerows(modified_rows)
-        if os.stat(file).st_size == 0:
-            os.remove(file)
-            print(f"    -      {os.path.splitext(file)[0].replace('Export','')} removed due to insufficient demand")
-    print("    All files edited (3/3)")
-def DeleteNonMatchingFiles():
-    print("    Indexing all files (1/3)")
-    import_files = [file for file in os.listdir('.') if file.endswith('Import.csv')]
-    export_files = [file for file in os.listdir('.') if file.endswith('Export.csv')]
-    print("    Comparing files and deleting non-matching files (2/3)")
-    print("    -    Managing import files (1/2)")
-    for import_file in import_files:
-        term = os.path.splitext(import_file)[0]
-        term = term.replace("Import","")
-        export_file = f"{term}Export.csv"
-        if export_file not in export_files:
-            print(f"    -    -    {os.path.splitext(import_file)[0].replace('Import','')} removed due to no export file counterpart")
-            os.remove(import_file)
-    print("    -    Managing export files (2/2)")
-    for export_file in export_files:
-        term = os.path.splitext(export_file)[0]
-        term = term.replace("Export","")
-        import_file = f"{term}Import.csv"
-
-        if import_file not in import_files:
-            print(f"    -    -    {os.path.splitext(export_file)[0].replace('Export','')} removed due to no import file counterpart")
-            os.remove(export_file)
-    print("    Non-matching files deleted (3/3)")
-def SortProfit():
-    print("    Compiling list of files to sort (1/4)")
-    csv_files = [file for file in os.listdir('.') if file.endswith('Import.csv')]
-    print("    Editing & sorting import files (2/4)")
-    for csv_file in csv_files:
-        with open(csv_file, 'r') as file:
-            reader = csv.reader(file)
-            data = list(reader)
-            data = [row for row in data if '-' not in row[2]]
-            for row in data:
-                first_variable = row[0].split("|")
-                row.append(first_variable[0])
-                row.append(first_variable[1])
-                row.pop(0)
-            sorted_data = sorted(data, key=lambda row: int(row[1]), reverse=False)
-            output_file = csv_file
-            with open(output_file, 'w', newline='') as output_file:
-                writer = csv.writer(output_file)
-                for row in sorted_data[:5]:
-                    writer.writerow(row)
-        csv_files = [file for file in os.listdir('.') if file.endswith('Export.csv')]
-    print("    Editing & sorting export files (3/4)")
-    for csv_file in csv_files:
-        with open(csv_file, 'r') as file:
-            reader = csv.reader(file)
-            data = list(reader)
-            data = [row for row in data if '-' not in row[2]]
-            for row in data:
-                first_variable = row[0].split("|")
-                row.append(first_variable[0])
-                row.append(first_variable[1])
-                row.pop(0)
-            sorted_data = sorted(data, key=lambda row: int(row[1]), reverse=True)
-            output_file = csv_file
-            with open(output_file, 'w', newline='') as output_file:
-                writer = csv.writer(output_file)
-                for row in sorted_data[:5]:
-                    writer.writerow(row)
-    print("    Finished editing files (4/4)")
-def ProfitValidation():
-    print("    Compiling list of routes to sort (1/3)")
-    files = [file for file in os.listdir('.') if file.endswith('Import.csv') or file.endswith('Export.csv')]
-    print("    Verifying each route's profitability & removing unprofitable routes (2/3)")
-    for file in files:
-        file_prefix = file.replace('Import.csv', '').replace('Export.csv', '')
-        with open(f"{file_prefix}Import.csv", 'r') as import_file:
-            reader = csv.reader(import_file)
-            import_rows = list(reader)
-            MaxImportRow = import_rows[0]
-            MaxImport = MaxImportRow[1]
-        with open(f"{file_prefix}Export.csv", 'r') as export_file:
-            reader = csv.reader(export_file)
-            export_rows = list(reader)
-            MaxExportRow = export_rows[0]
-            MaxExport = MaxExportRow[1]
-        if int(MaxExport) - int(MaxImport) < 338:
-            print(f"    -    {file_prefix} was removed as it is unprofitable")
-            os.remove(f"{file_prefix}Export.csv")
-            os.remove(f"{file_prefix}Import.csv")
-            files.remove(f"{file_prefix}Import.csv")
-            files.remove(f"{file_prefix}Export.csv")
-    print("    Unprofitable routes removed (3/3)")
 def SystemCoordinates(system):
     star = system.replace("+", "%2B")
     coordinates = CheckSystemCoords(system)
@@ -231,20 +9,20 @@ def SystemCoordinates(system):
     data = response.json()
     if 'coords' in data:
         SaveSystemCoords(system, data['coords'])
-        print(f"    -    New system: {system} - Coordinates Saved")
+        print(f"    === Coordinates Saved: {system}")
         return data['coords']
     else:
-        print(f"    -    Error with {system}")
+        print(f"    === Error with {system}")
         return None
 def CheckSystemCoords(system):
-    with open('!Coordinates.csv', 'r', newline='') as csvfile:
+    with open('Coordinates.csv', 'r', newline='') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            if row[0] == system:
+            if row[0]   == system:
                 return {'x': row[1], 'y': row[2], 'z': row[3]}
     return None
 def SaveSystemCoords(system, coords):
-    with open('!Coordinates.csv', 'a', newline='') as csvfile:
+    with open('Coordinates.csv', 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([system, coords['x'], coords['y'], coords['z']])
 def SystemDistance(System1, System2):
@@ -252,115 +30,222 @@ def SystemDistance(System1, System2):
     y_difference = float(System2["y"]) - float(System1["y"])
     z_difference = float(System2["z"]) - float(System1["z"])
     return math.sqrt(x_difference**2 + y_difference**2 + z_difference**2)
-def MaximisingProfit():
-    with open("!Profit.csv", 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow("")
-    print("    Compiling list of routes to sort (1/3)")
-    ImportFiles = [file for file in os.listdir('.') if file.endswith('Import.csv')]
-    print("    Maximising each route's profitability (2/3)")
-    for file in ImportFiles:
-        file_prefix = file.replace('Import.csv', '')
-        HighestProfit = float('-inf')
-        highest_import_row = None
-        highest_export_row = None
-        with open(f"{file_prefix}Import.csv", 'r') as import_file:
-            import_reader = csv.reader(import_file)
-            import_rows = list(import_reader)
-            for import_row in import_rows:
-                ImportSystem = import_row[3]
-                ImportCost = import_row[1]
-                with open(f"{file_prefix}Export.csv", 'r') as export_file:
-                    export_reader = csv.reader(export_file)
-                    export_rows = list(export_reader)
-                    for export_row in export_rows:
-                        ExportSystem = export_row[3]
-                        ExportCost = export_row[1]
-                        TotalProfit = (int(ExportCost) - int(ImportCost)) * 20000
-                        Distance = SystemDistance(SystemCoordinates(ImportSystem), SystemCoordinates(ExportSystem))
-                        FuelUsed = round((0.00000985*25000+0.26309)*Distance+10)
-                        JumpCost = math.ceil(Distance / 500) * 100000 + math.ceil(Distance / 500) * FuelUsed * 50000
-                        FinalProfit = TotalProfit - JumpCost
-                        if FinalProfit > HighestProfit:
-                            HighestProfit = FinalProfit
-                            highest_import_row = import_row
-                            highest_export_row = export_row
-                            HighestExportDistance = round(Distance, 2)
-        HighestExport = highest_export_row.pop(0)
-        HighestImport = highest_import_row.pop(0)
-        with open("!Profit.csv", 'a', newline='') as profit_file:
-            profit_writer = csv.writer(profit_file)
-            profit_writer.writerow([file_prefix] + [HighestProfit] + highest_import_row + highest_export_row + [HighestExportDistance])
-        os.remove(f"{file_prefix}Import.csv")
-        os.remove(f"{file_prefix}Export.csv")
-    print("    Removing less profitable routes (3/5)")
-    with open('!Profit.csv', 'r') as file:
-        reader = csv.reader(file)
-        rows = list(reader)
-        rows = rows[1:]
-        filtered_data = [row for row in rows if float(row[1]) > 100000000]
-    print("    Sorting the commodities (4/5)")
-    sorted_data = sorted(filtered_data, key=lambda x: float(x[1]), reverse=True)
-    with open('!Profit.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(sorted_data)
-    print("    All routes sorted (5/5)")
-def FormatRoutes():
-    print("    Wiping old routes (1/5)")
+def ListMaker():
+    url = 'https://inara.cz/elite/commodities-list/'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    table = soup.find('table')
+    rows = table.find_all('tr')
+    numbers = []
+    for row in rows:
+        link_element = row.find('a')
+        if link_element is not None:
+            link = link_element['href']
+            number = link.replace("/elite/commodity/", '').replace("/", '')
+            cells = row.find_all('td')
+            try:
+                cell_texts = [cell.get_text(strip=True).replace(',', '') for cell in cells]
+                if all(cell_texts) and all(int(value.replace('Cr', '')) != 0 for value in cell_texts[1:3]):
+                    numbers.append(number)
+            except IndexError:
+                continue
+    print(f"Found {len(numbers)} eligible commodities")
+    return numbers
+def VerifyCommodity(number):
+    ImportLink = f"https://inara.cz/elite/commodities/?pi1=1&pa1%5B%5D={number}&ps1=Sol&pi10=2&pi11=0&pi3=1&pi9=0&pi4=2&pi5=720&pi12=0&pi7=0&pi8=1"
+    Iresponse = requests.get(ImportLink)
+    Isoup = BeautifulSoup(Iresponse.content, 'html.parser')
+    option_element = Isoup.find('option', attrs={'value': str(number), 'selected': True})
+    if option_element is not None:
+        term = option_element.get_text(strip=True)
+    ImportTable = Isoup.find('table')
+    if ImportTable is None:
+        print(f"    ======= Insufficient import locations found for {term}, skipping to the next commodity")
+        return None
+    ImportRows = ImportTable.find_all('tr')
+    SecondImportRows = []
+    SecondExportRows = []
+    for row in ImportRows[1:]:
+        cells = row.find_all('td')
+        ImportCells = [cell.get_text(strip=True).replace(',', '').replace('\uFFFD', "").replace("PP+",'').replace('\ue84d', "").replace("\ue81d",'').replace("\ufe0e",'').replace("︎",'').replace('\ue84f', "").replace('\ue81d', "").replace('\ue84e', "").replace('\ue823', '') for cell in cells]
+        modified_row = [ImportCells[0], *ImportCells[4:6]]
+        modified_row[2] = modified_row[2].replace('Cr', '')
+        if int(modified_row[1]) >= 20000:
+            SecondImportRows.append(modified_row)
+    if SecondImportRows   == []:
+        print(f"    ======= Insufficient stock for {term}, skipping to the next commodity")
+        return None
+    ExportLink = f"https://inara.cz/elite/commodities/?pi1=2&pa1%5B%5D={number}&ps1=Sol&pi10=2&pi11=0&pi3=1&pi9=0&pi4=2&pi5=720&pi12=0&pi7=0&pi8=1"
+    Eresponse = requests.get(ExportLink)
+    Esoup = BeautifulSoup(Eresponse.content, 'html.parser')
+    ExportTable = Esoup.find('table')
+    if ExportTable is None:
+        print(f"    ======= Insufficient export locations for {term}, skipping to the next commodity")
+        return None
+    ExportRows = ExportTable.find_all('tr')
+    for row in ExportRows[1:]:
+        cells = row.find_all('td')
+        for cell in cells:
+            ExportCells = [cell.get_text(strip=True).replace(',', '').replace("PP+",'').replace('\uFFFD', "").replace('\ue84d', "").replace("\ue81d",'').replace("\ufe0e",'').replace("︎",'').replace('\ue84f', "").replace('\ue81d', "").replace('\ue84e', "").replace('\ue823', '') for cell in cells]
+        modified_row = [ExportCells[0], *ExportCells[4:6]]
+        modified_row[2] = modified_row[2].replace('Cr', '')
+        if int(modified_row[1]) >= 20000:
+            SecondExportRows.append(modified_row)
+    if SecondExportRows == []:
+        print(f"    ======= Insufficient demand for {term}, skipping to next commodity")
+        return None
+    for row in SecondImportRows:
+        first_variable = row[0].split("|")
+        row.append(first_variable[0])
+        row.append(first_variable[1])
+        row.pop(0)
+    for row in SecondExportRows:
+        first_variable = row[0].split("|")
+        row.append(first_variable[0])
+        row.append(first_variable[1])
+        row.pop(0)
+    SecondImportRows = [row for row in SecondImportRows if '-' not in row[1]]
+    SecondExportRows = [row for row in SecondExportRows if '-' not in row[1]]
+    SortedImportRows = sorted(SecondImportRows, key=lambda row: int(row[1]), reverse=False)
+    SortedExportRows = sorted(SecondExportRows, key=lambda row: int(row[1]), reverse=True)
+    MaxImportRow = SortedImportRows[0]
+    MaxImport = MaxImportRow[1]
+    MaxExportRow = SortedExportRows[0]
+    MaxExport = MaxExportRow[1]
+    if int(MaxExport) - int(MaxImport) < 338:
+        print(f"    ======= Insufficient profit for {term}, skipping to next commodity")
+        return None
+    ThirdImportRows = SortedImportRows[:5]
+    ThirdExportRows = SortedExportRows[:5]
+    HighestProfit = float('-inf')
+    highest_import_row = None
+    highest_export_row = None
+    for ImportRow in ThirdImportRows:
+        ImportSystem = ImportRow[3]
+        ImportCost = ImportRow[1]
+        for ExportRow in ThirdExportRows:
+            ExportSystem = ExportRow[3]
+            ExportCost = ExportRow[1]
+            TotalProfit = (int(ExportCost) - int(ImportCost)) * 20000
+            Distance = SystemDistance(SystemCoordinates(ImportSystem), SystemCoordinates(ExportSystem))
+            FuelUsed = round((0.00000985*25000+0.26309)*Distance+10)
+            JumpCost = math.ceil(Distance / 500) * 100000 + math.ceil(Distance / 500) * FuelUsed * 50000
+            FinalProfit = TotalProfit - JumpCost
+            if FinalProfit > HighestProfit:
+                HighestProfit = FinalProfit
+                highest_import_row = ImportRow
+                highest_export_row = ExportRow
+                HighestProfitDistance = round(Distance, 2)
+    HighestExportStation = highest_export_row[2]
+    HighestImportStation = highest_import_row[2]
+    HighestExportSystem = highest_export_row[3]
+    HighestImportSystem = highest_import_row[3]
+    highest_import_row.pop(0)
+    highest_export_row.pop(0)
+    if HighestProfit < 100000000:
+        print(f"    ======= Insufficient total profit for {term}, skipping to next commodity")
+        return None
+    ExportPlanetFinderLink = f"https://www.edsm.net/en/search/stations/index/cmdrPosition/{HighestExportSystem}/name/{HighestExportStation}/sortBy/distanceCMDR"
+    ImportPlanetFinderLink = f"https://www.edsm.net/en/search/stations/index/cmdrPosition/{HighestImportSystem}/name/{HighestImportStation}/sortBy/distanceCMDR"
+    EPresponse = requests.get(ExportPlanetFinderLink)
+    EPsoup = BeautifulSoup(EPresponse.content, 'html.parser')
+    EPTable = EPsoup.find('tbody')
+    if EPTable is None:
+        print(f"    ================================ ERROR finding the station that buys {term} on EDSM - Station: {HighestExportStation} - {HighestExportSystem}, skipping to the next commodity")
+        return None
+    EStationLink = EPTable.find('a')['href']
+    EStationLink = "https://www.edsm.net/"+EStationLink
+    IPresponse = requests.get(ImportPlanetFinderLink)
+    IPsoup = BeautifulSoup(IPresponse.content, 'html.parser')
+    IPTable = IPsoup.find('tbody')
+    if IPTable is None:
+        print(f"    ================================ ERROR finding the station that sells {term} on EDSM - Station: {HighestExportStation} - {HighestExportSystem}, skipping to the next commodity")
+        return None
+    IStationLink = IPTable.find('a')['href']
+    IStationLink = "https://www.edsm.net/"+IStationLink
+    ESresponse = requests.get(EStationLink)
+    ESsoup = BeautifulSoup(ESresponse.content, 'html.parser')
+    EStationType = str(ESsoup.find_all('div', class_='col-lg-8')[1])
+    EStationType = EStationType.replace('<div class="col-lg-8">','').replace('<strong class="scramble">','').replace('</strong>','').replace('</div>','').strip()
+    EInfoType = str(ESsoup.find_all('div', class_='col-lg-4')[2])
+    if "Distance to arrival:" in EInfoType:
+        EStationDistance = str(ESsoup.find_all('div', class_='col-lg-8')[2])
+        EStationDistance = EStationDistance.replace('<div class="col-lg-8">',"").replace('<strong>','').replace('</strong>','').replace("</div>",'').replace("ls",'').strip()
+        EPlanet = "N/A"
+    elif "Celestial body:" in EInfoType:
+        EStationDistance = str(ESsoup.find_all('div', class_='col-lg-8')[2])
+        EStationDistance = EStationDistance.replace('<div class="col-lg-8">',"").replace('<strong>','').replace('</strong>','').replace("</div>",'').replace("ls",'').strip()
+        ESDsoup = BeautifulSoup(EStationDistance, 'html.parser')
+        ESDTag = ESDsoup.find('em')
+        EStationDistance = str(ESDTag.get_text(strip=True)).replace("(","").replace(")",'').strip()
+        ESDATag = ESDsoup.find('a')
+        EPlanet = str(ESDATag.get_text(strip=True)).replace(f"({EStationDistance})","").strip()
+    else:
+        EStationDistance = "N/A"
+        EPlanet = "N/A"
+    ISresponse = requests.get(IStationLink)
+    ISsoup = BeautifulSoup(ISresponse.content, 'html.parser')
+    IStationType = str(ISsoup.find_all('div', class_='col-lg-8')[1])
+    IStationType = IStationType.replace('<div class="col-lg-8">','').replace('<strong class="scramble">','').replace('</strong>','').replace('</div>','').strip()
+    IInfoType = str(ISsoup.find_all('div', class_='col-lg-4')[2])
+    if "Distance to arrival:" in IInfoType:
+        IStationDistance = str(ISsoup.find_all('div', class_='col-lg-8')[2])
+        IStationDistance = IStationDistance.replace('<div class="col-lg-8">',"").replace('<strong>','').replace('</strong>','').replace("</div>",'').replace("ls",'').strip()
+        IPlanet = "N/A"
+    elif "Celestial body:" in IInfoType:
+        IStationDistance = str(ISsoup.find_all('div', class_='col-lg-8')[2])
+        IStationDistance = IStationDistance.replace('<div class="col-lg-8">',"").replace('<strong>','').replace('</strong>','').replace("</div>",'').replace("ls",'').strip()
+        ISDsoup = BeautifulSoup(IStationDistance, 'html.parser')
+        ISDTag = ISDsoup.find('em')
+        IStationDistance = str(ISDTag.get_text(strip=True)).replace("(","").replace(")",'').strip()
+        ISDATag = ISDsoup.find('a')
+        IPlanet = str(ISDATag.get_text(strip=True)).replace(f"({IStationDistance})","").strip()
+    else:
+        IStationDistance = "N/A"
+        IPlanet = "N/A"
+    print(f"    ================ {term} fulfilled every requirement, continuing to next commodity")
+    return [[term] + [HighestProfit] + highest_import_row + highest_export_row + [HighestProfitDistance] + [IStationType] + [IStationDistance] + [IPlanet] + [EStationType] + [EStationDistance] + [EPlanet]]
+def SortCommodities():
+    ViableCommodities = []
     with open('MostProfitableRoutes.txt', 'w') as file:
-        file.write("")
-        print("    Getting all routes to format (2/5)")
-    with open('!Profit.csv', 'r') as file:
-        reader = csv.reader(file)
-        data = list(reader)
-        print("    Formatting routes (3/5)")
-        with open('MostProfitableRoutes.txt', 'a') as file:
-            now = datetime.datetime.now()
-            RightNow = now.strftime("%Y-%m-%d %H:%M:%S")
-            file.write(f"Last update: {RightNow}\n")
-            for row in data:
-                formatted_route = f"""
-    Commodity: {row[0]}
+            file.write("")
+    numbers = ListMaker()
+    for number in numbers:
+        Commodity = VerifyCommodity(number)
+        if Commodity is not None:
+            TCommodity = Commodity[0]
+            ViableCommodities.append(TCommodity)
+    OrganizedCommodities = sorted(ViableCommodities, key=lambda x: float(x[1]), reverse=True)
+    with open('MostProfitableRoutes.txt', 'a') as file:
+        now = datetime.datetime.now()
+        RightNow = now.strftime("%Y-%m-%d %H:%M:%S")
+        file.write(f"Last update: {RightNow}\n")
+        for row in OrganizedCommodities:
+            formatted_route = f"""
+Commodity: {row[0]}
     Estimated Profit (20,000T): {int(row[1]):,} CR
+
     System to buy {row[0]}: {row[4]}
     Station to buy {row[0]}: {row[3]}
+    Distance from star: {row[10]} LS
+    Station type: {row[9]}
+    Station orbits/is located on: {row[11]}
     Price per ton: {int(row[2]):,} CR
+
     System to sell {row[0]}: {row[7]}
     Station to sell {row[0]}: {row[6]}
+    Distance from star: {row[13]} LS
+    Station type: {row[12]}
+    Station orbits/is located on: {row[14]}
     Price per ton: {int(row[5]):,} CR
+
     Distance: {(row[8])} LY\n"""
-                file.write(formatted_route)
-            print("Saving all routes to 'MostProfitableRoutes.txt' (4/5)")
-    print("    All routes saved (5/5)")
-print("Verifying commodity list (1/11)")
-ListMaker()
-print("Grabbing import commodity data (2/11)")
-ImportCommodityData()
-print("Editing import commodity data (3/11)")
-EditImCommodityData()
-print("Grabbing export commodity data (4/11)")
-ExportCommodityData()
-print("Editing export commodity data (5/11)")
-EditExCommodityData()
-print("Deleting non-matching files (6/11)")
-DeleteNonMatchingFiles()
-print("Sorting Rows (7/11)")
-SortProfit()
-print("Disregarding unprofitable routes (8/11)")
-ProfitValidation()
-print("Finding maximum profit for each commodity (9/11)")
-MaximisingProfit()
-print("Formatting routes (10/11)")
-FormatRoutes()
-print("All routes formatted (11/11)")
-with open('!Profit.csv', 'r') as file:
-    reader = csv.reader(file)
-    data = list(reader)
-    MostProfit = data [0]
-print(f"""
+            file.write(formatted_route)
+    MostProfit = OrganizedCommodities[0]
+    print(f"""
 The most profitable commodity at the moment is {MostProfit[0]} with an expected profit of {int(MostProfit[1]):,} credits if you buy 20,000 Tons.
-You can buy this for the lowest price ({int(MostProfit[2]):,} credits) at {MostProfit[3]} in the {MostProfit[4]} system.
-You can then sell this for the highest price ({int(MostProfit[5]):,} credits) at {MostProfit[6]} in the {MostProfit[7]} system.
+You can buy this for the lowest price ({int(MostProfit[2]):,} credits) at {MostProfit[3]} in the {MostProfit[4]} system. {MostProfit[3]} is a {MostProfit[9]} that orbits/is located on {MostProfit[11]} and is {MostProfit[10]} light seconds away from the star.
+You can then sell this for the highest price ({int(MostProfit[5]):,} credits) at {MostProfit[6]} in the {MostProfit[7]} system. {MostProfit[6]} is a {MostProfit[12]} that orbits/is located on {MostProfit[14]} and is {MostProfit[13]} light seconds away from the star.
 The distance between both systems is {MostProfit[8]} light years.
-Other very profitable routes can be found in the file titled 'MostProfitableRoutes.txt' in the same folder as this script.""")
-os.remove('!Profit.csv')
+{len(ViableCommodities)-1} other very profitable routes can be found in the file titled 'MostProfitableRoutes.txt' in the same folder as this script.""")
+SortCommodities()
